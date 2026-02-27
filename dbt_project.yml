@@ -39,8 +39,8 @@ models:
   walmart_data_analysis:
     # Applies to all files under models/example/
     silver:
-      schema: silver
+      +schema: silver
       +materialized: table
     gold:
-      schema: gold
+      +schema: gold
       +materialized: table    
