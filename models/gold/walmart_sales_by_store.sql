@@ -14,10 +14,10 @@ SELECT
     CURRENT_TIMESTAMP()             AS INSERT_DATE,
     CURRENT_TIMESTAMP()             AS UPDATE_DATE
 
-FROM {{ ref('walmart_fact_snapshot') }} f 
+FROM {{ ref('walmart_fact_table') }} f 
 JOIN {{ ref('walmart_store_dim') }} s ON s.STORE_ID = f.STORE_ID
 
-WHERE f.DBT_VALID_TO IS NULL  -- Only current active records
+WHERE f.VRSN_END_DATE IS NULL  -- Only current active records
 
 GROUP BY f.STORE_ID, s.STORE_TYPE, s.STORE_SIZE
 ORDER BY TOTAL_SALES DESC
