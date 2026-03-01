@@ -5,6 +5,7 @@
             (STORE_ID, STORE_TYPE, STORE_SIZE)
         FROM @{{ var('stage_name') }}/stores.csv
         FILE_FORMAT = (FORMAT_NAME = '{{ var("file_format_csv") }}')
+        FORCE = TRUE  -- tells Snowflake to reload even if the file was seen before
         ON_ERROR = 'CONTINUE';
     {% endset %}
 
@@ -13,6 +14,7 @@
             (STORE_ID, DEPT_ID, STORE_DATE, WEEKLY_SALES, ISHOLIDAY)
         FROM @{{ var('stage_name') }}/department.csv
         FILE_FORMAT = (FORMAT_NAME = '{{ var("file_format_csv") }}')
+        FORCE = TRUE  -- tells Snowflake to reload even if the file was seen before        
         ON_ERROR = 'CONTINUE';
     {% endset %}
 
@@ -22,6 +24,7 @@
              MARKDOWN3, MARKDOWN4, MARKDOWN5, CPI, UNEMPLOYMENT, ISHOLIDAY)
         FROM @{{ var('stage_name') }}/fact.csv
         FILE_FORMAT = (FORMAT_NAME = '{{ var("file_format_csv") }}')
+        FORCE = TRUE  -- tells Snowflake to reload even if the file was seen before
         ON_ERROR = 'CONTINUE';
     {% endset %}
 
