@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: walmart_date_dim
+    description: "Date dimension table (SCD1)"
+    columns:
+      - name: DATE_ID
+        description: "Primary Key"
+        tests:
+          - unique
+          - not_null
+      - name: STORE_DATE
+        description: "Calendar date"
+        tests:
+          - not_null        
+      - name: ISHOLIDAY
+        description: "Whether the date is holiday"
+      - name: INSERT_DATE
+        description: "When the record was created"
+      - name: UPDATE_DATE
+        description: "When record was last updated"
+
+  - name: walmart_store_dim
+    description: "Store dimention table (SCD1)"
+    columns:
+      - name: STORE_ID
+        description: "Store identifier"
+        tests:
+        - not_null
+      - name: DEPT_ID
+        description: "Department identifier in a store"
+        tests:
+          - not_null
+      - name: STORE_SIZE
+        description: "Size of a particular store"
+      - name: STORE_TYPE
+        description: "Type of store A, B, C"
+      - name: INSERT_DATE
+        description: "When the record was created"
+      - name: UPDATE_DATE
+        description: "When record was last updated"
