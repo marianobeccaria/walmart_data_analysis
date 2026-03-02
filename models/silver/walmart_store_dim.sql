@@ -17,21 +17,39 @@ depts AS (
 ),
 
 final AS (
-    SELECT
-        d.STORE_ID,
-        d.DEPT_ID,
-        s.STORE_TYPE,
-        CAST(s.STORE_SIZE AS INT) AS STORE_SIZE,
-        CURRENT_TIMESTAMP()       AS INSERT_DATE,
-        CURRENT_TIMESTAMP()       AS UPDATE_DATE
-    FROM depts d
-    LEFT JOIN stores s ON CAST(s.STORE_ID AS INT) = d.STORE_ID
-
-    -- Deduplicate just in case
-    QUALIFY ROW_NUMBER() OVER (
-        PARTITION BY d.STORE_ID, d.DEPT_ID 
-        ORDER BY d.STORE_ID
-    ) = 1
+    SELECT * FROM (
+        SELECT
+            d.STORE_ID,
+            d.DEPT_ID,
+            s.STORE_TYPE,
+            CAST(s.STORE_SIZE AS INT) AS STORE_SIZE,
+            CURRENT_TIMESTAMP()       AS INSERT_DATE,
+            CURRENT_TIMESTAMP()       AS UPDATE_DATE,
+            ROW_NUMBER() OVER (
+                PARTITION BY d.STORE_ID, d.DEPT_ID
+                ORDER BY d.STORE_ID
+            ) AS RN
+        FROM depts d
+        LEFT JOIN stores s ON CAST(s.STORE_ID AS INT) = d.STORE_ID
+    ) WHERE RN = 1
 )
+
+-- final AS (
+--     SELECT
+--         d.STORE_ID,
+--         d.DEPT_ID,
+--         s.STORE_TYPE,
+--         CAST(s.STORE_SIZE AS INT) AS STORE_SIZE,
+--         CURRENT_TIMESTAMP()       AS INSERT_DATE,
+--         CURRENT_TIMESTAMP()       AS UPDATE_DATE
+--     FROM depts d
+--     LEFT JOIN stores s ON CAST(s.STORE_ID AS INT) = d.STORE_ID
+
+--     -- Deduplicate just in case
+--     QUALIFY ROW_NUMBER() OVER (
+--         PARTITION BY d.STORE_ID, d.DEPT_ID 
+--         ORDER BY d.STORE_ID
+--     ) = 1
+-- )
 
 SELECT * FROM final
