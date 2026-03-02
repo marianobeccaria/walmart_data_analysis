@@ -22,6 +22,12 @@ models:
 
   - name: walmart_store_dim
     description: "Store dimention table (SCD1)"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - STORE_ID
+              - DEPT_ID
     columns:
       - name: STORE_ID
         description: "Store identifier"
@@ -39,3 +45,13 @@ models:
         description: "When the record was created"
       - name: UPDATE_DATE
         description: "When record was last updated"
+
+  - name: walmart_fact_table
+    description: "Fact table to implement SCD2"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - STORE_ID
+              - DEPT_ID
+              - STORE_DATE
