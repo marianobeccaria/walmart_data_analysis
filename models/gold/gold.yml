@@ -10,6 +10,7 @@ models:
       - name: STORE_TYPE
       - name: STORE_SIZE
       - name: WEEKS_OF_DATA
+      - name: ISHOLIDAY
         description: "How many weeks of date are displayed"
       - name: TOTAL_SALES
         description: "Total of all the reported weekly sales"
