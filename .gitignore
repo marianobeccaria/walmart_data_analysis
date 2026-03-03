@@ -5,3 +5,7 @@ dbt_packages/
 logs/
 dbt_internal_packages/
 .env
+walmart-env/
+walmart_env/
+*env/
+local_files/
