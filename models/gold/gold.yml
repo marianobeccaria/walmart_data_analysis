@@ -22,3 +22,5 @@ models:
         description: "Week with the most amount of sales"
       - name: INSERT_DATE
       - name: UPDATE_DATE
+  - name: walmart_economic_factors
+    description: "Factors affecting Store sales by year, month"
