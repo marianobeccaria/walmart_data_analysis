@@ -1,0 +1,9 @@
+sources:
+  - name: bronze
+    database: WALMART_DB
+    schema: BRONZE
+
+    tables:
+      - name: STORES_RAW
+      - name: DEPARTMENT_RAW
+      - name: FACT_RAW

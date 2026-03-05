@@ -2,12 +2,20 @@
 # Name your project! Project names should contain only lowercase characters
 # and underscores. A good package name should reflect your organization's
 # name or the intended use of these models
-name: 'my_new_project'
+name: 'walmart_data_analysis'
 version: '1.0.0'
 config-version: 2
 
 # This setting configures which "profile" dbt uses for this project.
 profile: 'default'
+
+vars:
+  target_db: WALMART_DB
+  target_schema: BRONZE
+  file_format_csv: WALMART_DB.BRONZE.CSV_FORMAT_01
+  stage_name: WALMART_DB.BRONZE.S3_TEST_STAGE
+  purge_status: FALSE
+
 
 # These configurations specify where dbt should look for different types of files.
 # The `model-paths` config, for example, states that models in this project can be
@@ -36,7 +44,11 @@ clean-targets:         # directories to be removed by `dbt clean`
 # using the `{{ config(...) }}` macro.
 
 models:
-  my_new_project:
+  walmart_data_analysis:
     # Applies to all files under models/example/
-    example:
+    silver:
+      +schema: silver
       +materialized: table
+    gold:
+      +schema: gold
+      +materialized: table    

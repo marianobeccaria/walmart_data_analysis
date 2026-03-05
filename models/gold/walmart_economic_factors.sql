@@ -1,0 +1,26 @@
+{{ config(materialized = 'table') }}
+
+SELECT 
+   f.STORE_ID,
+   f.STORE_DATE,
+   YEAR(f.STORE_DATE)         AS SALES_YEAR,
+   MONTH(f.STORE_DATE)        AS SALES_MONTH,
+   AVG(f.STORE_WEEKLY_SALES)  AS EEKLY_SALES,
+   AVG(f.TEMPERATURE)         AS AVG_TEMPERATURE,
+   AVG(f.FUEL_PRICE)          AS AVG_FUEL_PRICE,
+   AVG(f.CPI)                 AS AVG_CPI,
+   AVG(f.UNEMPLOYMENT)        AS AVG_UNEMPLOYMENT,
+   AVG(f.MARKDOWN1)           AS AVG_MARKDOWN1,
+   AVG(f.MARKDOWN2)           AS AVG_MARKDOWN2,
+   AVG(f.MARKDOWN3)           AS AVG_MARKDOWN3,
+   AVG(f.MARKDOWN4)           AS AVG_MARKDOWN4,
+   AVG(f.MARKDOWN5)           AS AVG_MARKDOWN5,
+   CURRENT_TIMESTAMP()      AS INSERT_DATE,
+   CURRENT_TIMESTAMP()      AS UPDATE_DATE
+
+FROM {{ ref('walmart_fact_table') }} f
+
+WHERE f.VRSN_END_DATE IS NULL  -- Only current active records
+
+GROUP BY f.STORE_ID, f.STORE_DATE, SALES_YEAR, SALES_MONTH
+ORDER BY f.STORE_DATE
