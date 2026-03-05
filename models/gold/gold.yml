@@ -1,0 +1,35 @@
+models:
+  - name: walmart_sales_by_store
+    description: "Total and average weekly sales by store"
+    columns:
+      - name: STORE_ID
+        tests:
+        - unique
+        - not_null
+        
+      - name: STORE_TYPE
+      - name: STORE_SIZE
+      - name: WEEKS_OF_DATA
+      - name: ISHOLIDAY
+        description: "How many weeks of date are displayed"
+      - name: TOTAL_SALES
+        description: "Total of all the reported weekly sales"
+      - name: AVG_WEEKLY_SALES
+        description: "Average weekly sales"
+      - name: MAX_WEEKLY_SALES
+        description: "Week with the least amount of sales"
+      - name: MIN_WEEKLY_SALES
+        description: "Week with the most amount of sales"
+      - name: INSERT_DATE
+      - name: UPDATE_DATE
+  - name: walmart_economic_factors
+    description: "Factors affecting Store sales by year, month"
+
+  - name: walmart_sales_by_storetype_month
+    description: "Store sales by STORE_TYPE (eg: A, B, or C) and by year, month"
+
+  - name: walmart_markdown_by_year_store
+    description: "total and average markdowns affecting store sales every year"
+
+  - name: walmart_sales_by_date_parts
+    description: "weekly sales per year, month" 
