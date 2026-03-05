@@ -1,6 +1,7 @@
 {{ config(materialized='table') }}
 
 SELECT 
+    f.STORE_ID,
     f.DEPT_ID,
     COUNT(DISTINCT f.STORE_DATE)    AS WEEKS_OF_DATA,
     AVG(f.STORE_WEEKLY_SALES)       AS AVG_WEEKLY_SALES,
@@ -14,5 +15,5 @@ FROM {{ ref('walmart_fact_table') }} f
 
 WHERE f.VRSN_END_DATE IS NULL 
 
-GROUP BY f.DEPT_ID
+GROUP BY f.STORE_ID, f.DEPT_ID
 ORDER BY TOTAL_SALES DESC

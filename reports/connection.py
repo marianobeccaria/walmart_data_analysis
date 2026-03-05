@@ -27,4 +27,13 @@ def get_dataframe(query):
     )
     cursor.close()
     conn.close()
+
+    # Convert any Decimal columns to float automatically
+    for col in df.columns:
+        if df[col].dtype == object:
+            try:
+                df[col] = df[col].astype(float)
+            except (ValueError, TypeError):
+                pass  # leave non-numeric columns as-is
+
     return df
