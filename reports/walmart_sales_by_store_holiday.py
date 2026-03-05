@@ -1,24 +1,10 @@
-import snowflake.connector
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
-from dotenv import load_dotenv
+import matplotlib.ticker as mticker
 import os
+from matplotlib.patches import Patch
+from connection import get_dataframe
 
-load_dotenv()
-
-conn = snowflake.connector.connect(
-    user      = os.getenv('SNOWFLAKE_USER'),
-    password  = os.getenv('SNOWFLAKE_PASSWORD'),
-    account   = os.getenv('SNOWFLAKE_ACCOUNT'),
-    warehouse = os.getenv('SNOWFLAKE_WAREHOUSE'),
-    database  = os.getenv('SNOWFLAKE_DATABASE'),
-    schema    = os.getenv('SNOWFLAKE_SCHEMA'),
-    role      = os.getenv('SNOWFLAKE_ROLE')
-)
-
-cursor = conn.cursor()
-cursor.execute("""
+df = get_dataframe("""
     SELECT
         STORE_ID,
         STORE_TYPE,
@@ -30,10 +16,6 @@ cursor.execute("""
     FROM WALMART_DB.GOLD.WALMART_SALES_BY_STORE
     ORDER BY STORE_ID, ISHOLIDAY
 """)
-
-df = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
-cursor.close()
-conn.close()
 
 # ────────────────────────────────────────────────
 # Separate holiday vs non-holiday
