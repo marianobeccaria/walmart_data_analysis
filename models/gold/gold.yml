@@ -30,3 +30,6 @@ models:
 
   - name: walmart_markdown_by_year_store
     description: "total and average markdowns affecting store sales every year"
+
+  - name: walmart_sales_by_date_parts
+    description: "weekly sales per year, month" 
