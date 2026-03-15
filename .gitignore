@@ -10,3 +10,4 @@ walmart_env/
 *env/
 local_files/
 __pycache__
+reports/charts/*
