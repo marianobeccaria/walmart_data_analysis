@@ -99,7 +99,7 @@ df_pivot = pd.concat([df_pivot, totals], ignore_index=True)
 # -------------------------------------------------------
 # Figure layout — line 2/3, table 1/3
 # -------------------------------------------------------
-fig = plt.figure(figsize=(24, 10))
+fig = plt.figure(figsize=(26, 10))
 fig.patch.set_facecolor('white')
 fig.suptitle('Weekly Sales by Store Type and Month',
              fontsize=20, fontweight='bold', y=1.01)
