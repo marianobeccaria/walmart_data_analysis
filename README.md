@@ -12,6 +12,8 @@
 - [Gold Layer](#gold-layer)
 - [Reports & Charts](#reports--charts)
 - [How to Run](#how-to-run)
+- [SCD2 Implementation History](#scd2-implementation-history)
+- [Snapshot Verification Tests](#snapshot-verification-tests)
 
 ---
 
@@ -51,7 +53,7 @@ AWS S3 (raw CSV files)
          ▼
 ┌─────────────────┐
 │  SILVER Schema  │  Cleaned, typed, versioned dimension
-│  dbt models     │  and fact tables (SCD1 / SCD2)
+│  dbt models     │  and fact tables (SCD1 / SCD2 snapshot)
 └────────┬────────┘
          │
          ▼
@@ -75,25 +77,25 @@ AWS S3 (raw CSV files)
 walmart_data_analysis/
 │
 ├── dbt_project.yml              # dbt project configuration
-├── packages.yml                 # dbt packages (dbt_utils)
+├── packages.yml                 # dbt packages (dbt_utils 1.3.3)
 ├── profiles.yml                 # Snowflake connection profile
 │
 ├── macros/
 │   ├── macros_copy_csv.sql      # Reusable COPY INTO macro
 │   ├── load_all_bronze.sql      # Orchestrates all 3 bronze loads
-│   └── generate_schema_name.sql # Schema naming override
+│   ├── generate_schema_name.sql # Schema naming override
+│   └── query_tags.sql           # Snowflake query tag utility
 │
 ├── models/
 │   ├── sources.yml              # Bronze table source definitions
 │   │
 │   ├── silver/
-│   │   ├── schema.yml           # Silver model definitions & tests
+│   │   ├── silver.yml           # Silver model definitions & tests
 │   │   ├── walmart_date_dim.sql
-│   │   ├── walmart_store_dim.sql
-│   │   └── walmart_fact_table.sql
+│   │   └── walmart_store_dim.sql
 │   │
 │   └── gold/
-│       ├── schema.yml
+│       ├── gold.yml
 │       ├── walmart_sales_by_store.sql
 │       ├── walmart_sales_by_dept.sql
 │       ├── walmart_sales_by_date_parts.sql
@@ -102,7 +104,9 @@ walmart_data_analysis/
 │       ├── walmart_holiday_impact.sql
 │       └── walmart_economic_factors.sql
 │
-├── snapshots/                   # (deprecated — replaced by incremental model)
+├── snapshots/
+│   ├── schema.yml                 # Snapshot definitions & tests
+│   └── walmart_fact_snapshot.sql  # SCD2 fact table via dbt snapshot
 │
 └── reports/
     ├── connection.py            # Reusable Snowflake connection module
@@ -123,7 +127,7 @@ walmart_data_analysis/
 
 ### Prerequisites
 - Snowflake account (free trial works)
-- dbt Cloud account
+- dbt Cloud account or VSCode with dbt-fusion extension
 - AWS S3 bucket with raw CSV files
 - Python 3.11+ with conda or venv
 
@@ -268,33 +272,46 @@ Uses `QUALIFY ROW_NUMBER()` to deduplicate and ensure one row per `STORE_ID + DE
 
 ---
 
-#### `walmart_fact_table` — SCD Type 2
-Central fact table containing weekly sales and economic measures. Implements SCD2 versioning so historical records are preserved when data changes.
+#### `walmart_fact_snapshot` — SCD Type 2 (dbt snapshot) ✅ Current
+Central fact table containing weekly sales and economic measures. Implements SCD2 versioning using a native dbt snapshot so historical records are preserved when data changes.
 
 | Column | Type | Description |
 |--------|------|-------------|
-| SNAPSHOT_KEY | VARCHAR | Surrogate unique key (STORE_ID + DEPT_ID + DATE) |
+| SNAPSHOT_KEY | VARCHAR | Surrogate unique key (hash of STORE_ID + DEPT_ID + DATE) |
 | STORE_ID | INT | Foreign key to store_dim |
 | DEPT_ID | INT | Foreign key to store_dim |
 | DATE_ID | INT | Foreign key to date_dim |
 | STORE_DATE | DATE | Week ending date |
+| STORE_TYPE | VARCHAR | Store type at time of record |
+| STORE_SIZE | INT | Store size at time of record |
 | STORE_WEEKLY_SALES | DECIMAL | Weekly sales amount in dollars |
 | FUEL_PRICE | DECIMAL | Regional fuel price |
 | TEMPERATURE | DECIMAL | Average weekly temperature (°F) |
 | CPI | DECIMAL | Consumer Price Index |
 | UNEMPLOYMENT | DECIMAL | Regional unemployment rate |
 | MARKDOWN1-5 | DECIMAL | Promotional markdown amounts |
-| VRSN_START_DATE | TIMESTAMP | When this version became active |
-| VRSN_END_DATE | TIMESTAMP | When this version was superseded (NULL = current) |
+| DBT_VALID_FROM | TIMESTAMP | When this version became active |
+| DBT_VALID_TO | TIMESTAMP | When this version was superseded (NULL = current) |
+| DBT_SCD_ID | VARCHAR | dbt internal snapshot record identifier |
+| DBT_UPDATED_AT | TIMESTAMP | When the record was last changed |
 | INSERT_DATE | TIMESTAMP | Record creation timestamp |
 | UPDATE_DATE | TIMESTAMP | Record last updated timestamp |
 
-**SCD2** means when a row changes (e.g. sales corrected), the old row gets a `VRSN_END_DATE` and a new row is inserted with `VRSN_END_DATE = NULL`. This preserves the full history of changes.
+**Snapshot strategy:** `check` — dbt compares incoming rows against existing snapshot rows on the specified `check_cols`. If any value has changed, the old record is versioned out and a new one is inserted.
 
 To query only current active records:
 ```sql
-SELECT * FROM WALMART_DB.SILVER.WALMART_FACT_TABLE
-WHERE VRSN_END_DATE IS NULL;
+SELECT * FROM WALMART_DB.SILVER.WALMART_FACT_SNAPSHOT
+WHERE DBT_VALID_TO IS NULL;
+```
+
+To query the full version history for a specific record:
+```sql
+SELECT STORE_ID, DEPT_ID, STORE_DATE, STORE_WEEKLY_SALES,
+       DBT_VALID_FROM, DBT_VALID_TO
+FROM WALMART_DB.SILVER.WALMART_FACT_SNAPSHOT
+WHERE STORE_ID = 1 AND DEPT_ID = 1 AND STORE_DATE = '2010-02-05'
+ORDER BY DBT_VALID_FROM;
 ```
 
 ---
@@ -303,7 +320,7 @@ WHERE VRSN_END_DATE IS NULL;
 
 **Schema:** `WALMART_DB.GOLD`
 
-The Gold layer contains pre-aggregated, report-ready tables. All Gold models read from Silver (never directly from Bronze) and are materialized as tables for fast query performance.
+The Gold layer contains pre-aggregated, report-ready tables. All Gold models read from Silver (never directly from Bronze) and filter `WHERE DBT_VALID_TO IS NULL` to use only current active snapshot records.
 
 ### Models
 
@@ -336,51 +353,49 @@ df = get_dataframe("SELECT * FROM WALMART_DB.GOLD.YOUR_TABLE")
 ### 1. `walmart_sales_by_store.py`
 **Requirement:** Weekly sales by store type and store size
 
-Shows total sales per store colored by store type (A/B/C). Helps identify which stores and store types drive the most revenue. Type A (large format) stores consistently outperform Type B and C stores.
+Shows total sales per store colored by store type (A/B/C). Type A (large format) stores consistently outperform Type B and C stores.
 
 ---
 
 ### 2. `walmart_sales_by_dept.py`
 **Requirement:** Weekly sales by department
 
-Four-panel dashboard showing: total sales by department/store, avg weekly sales, side-by-side comparison, and a Min/Avg/Max grouped bar chart. Department 92 is consistently the top performer across stores.
+Shows a 4 panel dashboard: total sales by department/store, avg weekly sales, side-by-side comparison, and Min/Avg/Max grouped bar chart. Department 92 is consistently the top performer.
 
 ---
 
 ### 3. `walmart_holiday_impact.py`
 **Requirement:** Weekly sales by store and holiday
 
-Three-panel layout with a pie chart showing holiday vs non-holiday sales share, a grand total KPI card, a holiday premium KPI card, and a grouped bar chart comparing holiday vs non-holiday sales per store. Holiday weeks show approximately 7% higher average weekly sales than non-holiday weeks.
+Pie chart, KPI cards, and grouped bar chart comparing holiday vs non-holiday sales per store. Holiday weeks show approximately 7% higher average weekly sales.
 
 ---
 
 ### 4. `walmart_sales_by_date_parts.py`
 **Requirement:** Weekly sales by year, month and day
 
-Four-panel time series dashboard: full weekly trend with holiday markers, year-over-year comparison lines, monthly seasonality bar chart, and holiday vs non-holiday comparison by month. Shows clear seasonality peaks in November/December driven by holiday shopping.
+Four-panel time series: full weekly trend with holiday markers, year-over-year comparison, monthly seasonality, and holiday vs non-holiday by month. Clear peaks in November/December.
 
 ---
 
 ### 5. `walmart_sales_by_storetype_month.py`
 **Requirement:** Weekly sales by store type and month
 
-Two-panel layout with a line chart showing monthly sales trends per store type and a summary table with monthly totals for each store type. Type A stores show significantly higher absolute sales but all types follow similar seasonal patterns.
+Line chart of monthly trends per store type with a summary table of monthly totals. All types follow similar seasonal patterns with Type A showing highest absolute sales.
 
 ---
 
 ### 6. `walmart_markdown_by_year_store.py`
 **Requirement:** Markdown sales by year and store
 
-Grouped bar chart showing markdown amounts by type (MD1-MD5) for each year. No markdown data exists for 2010 — Walmart began recording markdowns in 2011. Markdown activity increased significantly from 2011 to 2012 with Markdown 3 and Markdown 5 showing the largest growth.
+Grouped bar chart of markdown amounts by type (MD1-MD5) per year. No markdown data in 2010. Markdown activity increased significantly from 2011 to 2012.
 
 ---
 
 ### 7. `walmart_economic_factors.py`
 **Requirement:** Weekly sales by CPI, temperature, fuel price, and unemployment
 
-Four-panel chart with scatter plots and line charts examining the relationship between weekly sales and key economic indicators. Notable findings: fuel price shows a positive correlation with sales (both rose together as the economy recovered post-2009), while unemployment shows a negative correlation (higher unemployment correlates with lower spending).
-
-> **Note:** Correlation does not imply causation. External economic conditions (post-recession recovery) likely influenced both sales and these factors simultaneously.
+Four-panel chart with scatter plots and line charts. Fuel price shows positive correlation with sales; unemployment shows negative correlation.
 
 ---
 
@@ -392,16 +407,19 @@ Four-panel chart with scatter plots and line charts examining the relationship b
 # Step 1: Load Bronze tables from S3
 dbt run-operation load_all_bronze
 
-# Step 2: Build Silver dimension and fact tables
-dbt run --select silver --full-refresh
+# Step 2: Build Silver dimension tables
+dbt run --full-refresh
 
-# Step 3: Build Gold aggregation tables
+# Step 3: Run SCD2 snapshot for fact table
+dbt snapshot
+
+# Step 4: Build Gold aggregation tables
 dbt run --select gold
 
-# Step 4: Run data quality tests
+# Step 5: Run data quality tests
 dbt test
 
-# Step 5: Generate documentation
+# Step 6: Generate documentation
 dbt docs generate
 dbt docs serve
 ```
@@ -409,21 +427,16 @@ dbt docs serve
 ### Incremental Run (new data loaded to S3)
 
 ```bash
-# Reload Bronze with new data
-dbt run-operation load_all_bronze
-
-# Incrementally update Silver (new rows only)
-dbt run --select silver
-
-# Rebuild Gold
-dbt run --select gold
+dbt run-operation load_all_bronze  # reload Bronze
+dbt run                            # update Silver dims
+dbt snapshot                       # picks up new/changed rows
+dbt run --select gold              # rebuild Gold
 ```
 
 ### Generate Python Charts
 
 ```bash
-cd reports
-conda activate walmart_env
+cd reports && conda activate walmart_env
 
 python walmart_sales_by_store.py
 python walmart_sales_by_dept.py
@@ -434,8 +447,6 @@ python walmart_markdown_by_year_store.py
 python walmart_economic_factors.py
 ```
 
-Charts are saved to `reports/charts/`.
-
 ---
 
 ## dbt Commands Reference
@@ -445,20 +456,161 @@ Charts are saved to `reports/charts/`.
 | `dbt run` | Build all models |
 | `dbt run --select model_name` | Build a specific model |
 | `dbt run --full-refresh` | Rebuild all models from scratch |
+| `dbt snapshot` | Run all snapshots |
 | `dbt test` | Run all data quality tests |
 | `dbt run-operation load_all_bronze` | Load raw CSV data into Bronze |
 | `dbt compile` | Generate SQL without executing |
 | `dbt docs generate && dbt docs serve` | Build and view documentation |
 | `dbt source freshness` | Check Bronze table freshness |
+| `dbt system update` | Upgrade dbt-fusion to latest version |
+
+---
+
+## SCD2 Implementation History
+
+The fact table SCD2 implementation went through two iterations. Both are documented here for reference.
+
+---
+
+### Approach 1: dbt Incremental Model (`walmart_fact_table`) — Superseded
+
+The first implementation used a dbt `incremental` model with `merge` strategy and manually managed `VRSN_START_DATE` / `VRSN_END_DATE` versioning columns.
+
+```sql
+{{ config(
+    materialized         = 'incremental',
+    unique_key           = 'SNAPSHOT_KEY',
+    incremental_strategy = 'merge'
+) }}
+```
+
+**Why it was built this way:** Testing of dbt snapshots on dbt-fusion `2.0.0-preview.120` revealed a deduplication bug — the snapshot inserted duplicate rows on every run instead of merging. The incremental model with `QUALIFY ROW_NUMBER()` was used as a reliable workaround.
+
+**Query pattern:**
+```sql
+SELECT * FROM WALMART_DB.SILVER.WALMART_FACT_TABLE
+WHERE VRSN_END_DATE IS NULL;
+```
+
+---
+
+### Approach 2: dbt Native Snapshot (`walmart_fact_snapshot`) ✅ Current
+
+After upgrading to dbt-fusion `2.0.0-preview.126`, the snapshot deduplication bug was confirmed fixed. The implementation was migrated to a native dbt snapshot using the `check` strategy.
+
+**Advantages over the incremental approach:**
+- dbt manages all versioning logic automatically
+- `DBT_VALID_FROM` / `DBT_VALID_TO` handled natively
+- Industry standard pattern for SCD2 in dbt
+- Cleaner, less custom SQL to maintain
+
+**Why `check` strategy over `timestamp`?** The source CSV files have no reliable `updated_at` column. The `check` strategy compares specific column values on each run to detect changes.
+
+**Query pattern:**
+```sql
+SELECT * FROM WALMART_DB.SILVER.WALMART_FACT_SNAPSHOT
+WHERE DBT_VALID_TO IS NULL;
+```
+
+---
+
+## Snapshot Verification Tests
+
+Four tests were performed to verify the snapshot implementation before merging to main.
+
+---
+
+### Test 1: Idempotency ✅
+
+Confirmed that running the snapshot multiple times against unchanged data does not insert duplicate rows.
+
+```bash
+dbt snapshot  # run 1 → 421,570 rows
+dbt snapshot  # run 2 → 421,570 rows (unchanged)
+```
+
+---
+
+### Test 2: SCD2 Versioning Behavior ✅
+
+Confirmed that when a source value changes, the old record is versioned out and a new active record is inserted.
+
+```sql
+-- Simulate a correction in Bronze
+UPDATE WALMART_DB.BRONZE.DEPARTMENT_RAW
+SET WEEKLY_SALES = '99999.99'
+WHERE STORE_ID = '1' AND DEPT_ID = '1' AND STORE_DATE = '2010-02-05';
+```
+
+After running `dbt snapshot`:
+
+```
+STORE_WEEKLY_SALES | DBT_VALID_FROM      | DBT_VALID_TO
+24924.50           | 2026-03-15 14:36:01 | 2026-03-15 14:57:43  ← versioned out
+99999.99           | 2026-03-15 14:57:43 | NULL                 ← new active record
+```
+
+Total rows increased from 421,570 to 421,571 with exactly 1 versioned out row.
+
+---
+
+### Test 3: New Data from S3 ✅
+
+Confirmed that new rows appended to source CSV files and uploaded to S3 flow through the full pipeline correctly.
+
+```bash
+# Append new rows to department.csv
+cat >> department.csv << 'EOF'
+1,1,2013-01-04,25000.00,FALSE
+1,2,2013-01-04,18500.00,FALSE
+2,1,2013-01-04,31000.00,FALSE
+2,2,2013-01-04,22000.00,FALSE
+EOF
+
+# Upload and run full pipeline
+aws s3 cp department.csv s3://your-bucket/raw_data/department.csv
+dbt run-operation load_all_bronze && dbt run && dbt snapshot && dbt run --select gold
+```
+
+After the run:
+```sql
+SELECT MAX(STORE_DATE) FROM WALMART_DB.SILVER.WALMART_FACT_SNAPSHOT
+WHERE DBT_VALID_TO IS NULL;
+-- Result: 2013-01-04 ✅
+```
+
+All 4 new rows appeared correctly as active records.
+
+---
+
+### Test 4: dbt Data Quality Tests ✅
+
+```bash
+dbt test
+# Result: 8/8 tests passing
+```
+
+```
+✅ unique_walmart_date_dim_DATE_ID
+✅ not_null_walmart_date_dim_DATE_ID
+✅ not_null_walmart_date_dim_STORE_DATE
+✅ not_null_walmart_store_dim_STORE_ID
+✅ not_null_walmart_store_dim_DEPT_ID
+✅ unique_combination_of_columns_walmart_store_dim_STORE_ID__DEPT_ID
+✅ not_null_walmart_sales_by_store_STORE_ID
+✅ unique_combination_of_columns_walmart_sales_by_store_STORE_ID__ISHOLIDAY
+```
 
 ---
 
 ## Key Design Decisions
 
-**Why VARCHAR in Bronze?** The source CSVs contain `NA` values in markdown columns. Using `VARCHAR` for all Bronze columns ensures `COPY INTO` never fails due to type casting errors. All casting happens in Silver using `TRY_CAST()` which returns `NULL` instead of erroring on bad values.
+**Why VARCHAR in Bronze?** The source CSVs contain `NA` values in markdown columns. Using `VARCHAR` ensures `COPY INTO` never fails. All casting happens in Silver using `TRY_CAST()` which returns `NULL` instead of erroring.
 
 **Why SCD2 for the fact table?** Sales data can be retroactively corrected. SCD2 preserves the original record and inserts a new version, allowing historical analysis to reflect what the data looked like at any point in time.
 
-**Why dbt incremental instead of snapshot?** dbt-fusion (v2 preview) has known issues with snapshot deduplication. The incremental model with `QUALIFY ROW_NUMBER()` provides the same SCD2 behavior with more explicit control and reliable deduplication.
+**Why dbt snapshot over incremental?** The native dbt snapshot is the industry standard for SCD2 in dbt. It handles all versioning logic automatically. The incremental model was used initially as a workaround for a bug in dbt-fusion preview versions that was fixed in `2.0.0-preview.126`.
 
-**Why Gold reads from Silver only?** Following Medallion Architecture principles, each layer builds on the previous one. Gold models benefit from Silver's data quality guarantees (proper types, deduplication, SCD versioning) without needing to re-implement that logic.
+**Why `check` strategy?** The source CSV files have no reliable `updated_at` timestamp. The `check` strategy compares specific column values on each run, working correctly regardless of whether source timestamps exist.
+
+**Why Gold reads from Silver only?** Following Medallion Architecture principles, Gold benefits from Silver's data quality guarantees without re-implementing casting, deduplication, or SCD logic.
