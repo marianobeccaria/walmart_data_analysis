@@ -35,9 +35,12 @@ base AS (
         )                                       AS TOTAL_ALL_MARKDOWNS,
         CURRENT_TIMESTAMP()                     AS INSERT_DATE,
         CURRENT_TIMESTAMP()                     AS UPDATE_DATE
-    FROM {{ ref('walmart_fact_table') }} f
+
+    FROM {{ ref('walmart_fact_snapshot') }} f
     LEFT JOIN store_type s ON f.STORE_ID = s.STORE_ID
-    WHERE f.VRSN_END_DATE IS NULL
+
+    WHERE f.DBT_VALID_TO IS NULL
+    
     GROUP BY
         f.STORE_ID,
         s.STORE_TYPE,
