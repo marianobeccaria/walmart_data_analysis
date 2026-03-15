@@ -9,3 +9,4 @@ walmart-env/
 walmart_env/
 *env/
 local_files/
+__pycache__

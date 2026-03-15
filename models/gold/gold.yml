@@ -33,3 +33,6 @@ models:
 
   - name: walmart_sales_by_date_parts
     description: "weekly sales per year, month" 
+
+  - name: walmart_sales_by_dept
+    description: "Sales by department"
