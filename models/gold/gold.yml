@@ -1,12 +1,14 @@
 models:
   - name: walmart_sales_by_store
     description: "Total and average weekly sales by store"
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - STORE_ID
+              - ISHOLIDAY
     columns:
       - name: STORE_ID
-        tests:
-        - unique
-        - not_null
-        
       - name: STORE_TYPE
       - name: STORE_SIZE
       - name: WEEKS_OF_DATA

@@ -18,9 +18,8 @@ SELECT
    CURRENT_TIMESTAMP()      AS INSERT_DATE,
    CURRENT_TIMESTAMP()      AS UPDATE_DATE
 
-FROM {{ ref('walmart_fact_table') }} f
-
-WHERE f.VRSN_END_DATE IS NULL  -- Only current active records
+FROM {{ ref('walmart_fact_snapshot') }} f
+WHERE f.DBT_VALID_TO IS NULL
 
 GROUP BY f.STORE_ID, f.STORE_DATE, SALES_YEAR, SALES_MONTH
 ORDER BY f.STORE_DATE

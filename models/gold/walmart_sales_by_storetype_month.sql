@@ -11,10 +11,10 @@ SELECT
     CURRENT_TIMESTAMP()                 AS INSERT_DATE,
     CURRENT_TIMESTAMP()                 AS UPDATE_DATE
 
-FROM {{ ref('walmart_fact_table')}} f
+FROM {{ ref('walmart_fact_snapshot') }} f
 JOIN {{ref('walmart_store_dim')}} s ON s.STORE_ID = f.STORE_ID
 
-WHERE f.VRSN_END_DATE IS NULL
+WHERE f.DBT_VALID_TO IS NULL
 
 GROUP BY
     s.STORE_TYPE,

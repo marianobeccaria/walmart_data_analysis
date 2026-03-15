@@ -1,0 +1,29 @@
+version: 2
+
+snapshots:
+  - name: walmart_fact_snapshot
+    description: "Fact table with weekly sales - SCD2 via dbt snapshot"
+    columns:
+      - name: SNAPSHOT_KEY
+        description: "Surrogate unique key"
+        tests:
+          - unique
+          - not_null
+      - name: STORE_ID
+        description: "Foreign key to walmart_store_dim"
+        tests:
+          - not_null
+      - name: DEPT_ID
+        description: "Foreign key to walmart_store_dim"
+        tests:
+          - not_null
+      - name: STORE_DATE
+        description: "Week ending date"
+        tests:
+          - not_null
+      - name: STORE_WEEKLY_SALES
+        description: "Weekly sales amount"
+      - name: DBT_VALID_FROM
+        description: "SCD2 version start timestamp"
+      - name: DBT_VALID_TO
+        description: "SCD2 version end timestamp - NULL means current active record"
